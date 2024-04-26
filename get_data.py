@@ -187,9 +187,6 @@ def plot_and_record_data(board):
         board.start_stream()
         graph = Graph(board_shim=board)
 
-        print("Press Enter to stop recording and save data...")
-        input() # wait for user to stop recording
-
         data = board.get_board_data()
         DataFilter.write_file(data, "cyton_data.csv", 'w')
         
