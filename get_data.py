@@ -160,26 +160,6 @@ def set_up_board():
     except BaseException as e:
         logging.warning("Exception", exc_info=True)
 
-def real_time_plot(board):
-    try:
-        board.prepare_session()
-
-        print("board has prepared session")
-
-        board.start_stream()
-
-        # data = board.get_current_board_data(256)  # get latest 256 packages or less, doesnt remove them from internal buffer
-        # data = board.get_board_data()  # get all data and remove it from internal buffer
-
-        graph = Graph(board_shim=board)
-    except BaseException as e:
-        logging.warning("Exeption", exc_info=True)
-    finally:
-        logging.info("End")
-        if board.is_prepared():
-            board.stop_stream()
-            logging.info("Releasing session")
-            board.release_session()
 
 def plot_and_record_data(board):
     try:
