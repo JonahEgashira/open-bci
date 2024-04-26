@@ -84,7 +84,7 @@ class Graph:
         self.app.processEvents()  # Update the graph
 
 
-def main():
+def set_up_board():
     parser = argparse.ArgumentParser()
     # use docs to check which parameters are required for specific board, e.g. for Cyton - set serial port
     parser.add_argument(
@@ -108,7 +108,7 @@ def main():
         "--ip-address", type=str, help="ip address", required=False, default=""
     )
     parser.add_argument(
-        "--serial-port", type=str, help="serial port", required=False, default=""
+        "--serial-port", type=str, help="serial port", required=True, default=""
     )
     parser.add_argument(
         "--mac-address", type=str, help="mac address", required=False, default=""
@@ -130,7 +130,7 @@ def main():
         "--board-id",
         type=int,
         help="board id, check docs to get a list of supported boards",
-        required=True,
+        required=False,
     )
     parser.add_argument("--file", type=str, help="file", required=False, default="")
     parser.add_argument("--log", action="store_true")
@@ -155,19 +155,23 @@ def main():
         BoardShim.disable_board_logger()
 
     try:
-        board = BoardShim(args.board_id, params)
+        board = BoardShim(BoardIds.CYTON_BOARD, params)
+        return board
+    except BaseException as e:
+        logging.warning("Exception", exc_info=True)
+
+def real_time_plot(board):
+    try:
         board.prepare_session()
 
         print("board has prepared session")
 
-        # board.start_stream () # use this for default options
         board.start_stream()
 
         # data = board.get_current_board_data(256)  # get latest 256 packages or less, doesnt remove them from internal buffer
         # data = board.get_board_data()  # get all data and remove it from internal buffer
 
         graph = Graph(board_shim=board)
-
     except BaseException as e:
         logging.warning("Exeption", exc_info=True)
     finally:
@@ -177,6 +181,34 @@ def main():
             logging.info("Releasing session")
             board.release_session()
 
+def plot_and_record_data(board):
+    try:
+        board.prepare_session()
+        board.start_stream()
+        graph = Graph(board_shim=board)
+
+        print("Press Enter to stop recording and save data...")
+        input() # wait for user to stop recording
+
+        data = board.get_board_data()
+        DataFilter.write_file(data, "cyton_data.csv", 'w')
+        
+        print("Data saved to cyton_data.csv")
+
+    except BrainFlowError as e:
+        logging.warning("Exception", exc_info=True)
+
+    finally:
+        logging.info("End")
+        if board.is_prepared():
+            board.stop_stream()
+            logging.info("Releasing session")
+            board.release_session()
+    
+
+def main():
+    board = set_up_board()
+    plot_and_record_data(board)
 
 if __name__ == "__main__":
     main()
