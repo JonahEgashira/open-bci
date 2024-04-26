@@ -1,0 +1,11 @@
+brainflow==5.12.1
+nptyping==1.4.4
+numpy==1.26.4
+PyQt5==5.15.10
+PyQt5-Qt5==5.15.13
+PyQt5-sip==12.13.0
+PyQt6-Qt6==6.7.0
+PyQt6-sip==13.6.0
+pyqtgraph==0.13.6
+python-osc==1.8.3
+typish==1.9.3
