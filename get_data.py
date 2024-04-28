@@ -4,8 +4,18 @@ import numpy as np
 import logging
 
 import brainflow
-from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
-from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, DetrendOperations
+from brainflow.board_shim import (
+    BoardShim,
+    BrainFlowInputParams,
+    BoardIds,
+    BrainFlowError,
+)
+from brainflow.data_filter import (
+    DataFilter,
+    FilterTypes,
+    AggOperations,
+    DetrendOperations,
+)
 
 import pyqtgraph as pg
 import sys
@@ -13,6 +23,9 @@ import sys
 from PyQt5.QtWidgets import QApplication, QWidget
 from pyqtgraph.Qt import QtCore, QtGui
 from pythonosc import udp_client, osc_message_builder
+
+import mne
+
 
 class Graph:
     def __init__(self, board_shim):
@@ -161,16 +174,48 @@ def set_up_board():
         logging.warning("Exception", exc_info=True)
 
 
-def plot_and_record_data(board):
+def analyze_eeg_data(board, eeg_data):
+    eeg_data = eeg_data / 1e6  # BrainFlow returns uV, convert to V for MNE
+
+    ch_names = [
+        'N/A', # First channel is not connected
+        'O2',
+        'O1',
+        'Pz',
+        'C4',
+        'Cz',
+        'C3',
+        'Fz',
+    ]
+    ch_types = ['eeg'] * len(ch_names)
+
+    sfreq = board.get_sampling_rate(board.board_id)
+
+    info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
+    raw = mne.io.RawArray(eeg_data, info)
+
+    plot = raw.plot(
+        block=True,
+        scalings='auto'
+    )
+
+def get_eeg_data(board):
+    eeg_data = None
+
     try:
         board.prepare_session()
         board.start_stream()
+
         graph = Graph(board_shim=board)
 
         data = board.get_board_data()
-        DataFilter.write_file(data, "cyton_data.csv", 'w')
-        
-        print("Data saved to cyton_data.csv")
+        eeg_channels  = board.get_eeg_channels(board.board_id)
+
+        eeg_data = data[eeg_channels, :]
+
+        DataFilter.write_file(eeg_data, "eeg_data.csv", "w")
+
+        print("Data saved to eeg_data.csv")
 
     except BrainFlowError as e:
         logging.warning("Exception", exc_info=True)
@@ -181,11 +226,15 @@ def plot_and_record_data(board):
             board.stop_stream()
             logging.info("Releasing session")
             board.release_session()
-    
+        
+        logging.info("Session released")
+        return eeg_data
+
 
 def main():
     board = set_up_board()
-    plot_and_record_data(board)
-
+    eeg_data = get_eeg_data(board)
+    analyze_eeg_data(board, eeg_data)
+    
 if __name__ == "__main__":
     main()
