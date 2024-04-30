@@ -65,17 +65,17 @@ class PatternLearningTask(QWidget):
     def prepareLabel(self) -> None:
         self.result_label = QLabel(self)
         self.result_label.setText("Press Any Key")
-        label_width = 300
-        label_height = 100
+        label_width = 200
+        label_height = 60
 
         self.result_label.setGeometry(
-            (self.width - label_width) // 2 + 50,
-            self.height // 6,
+            (self.width - label_width) // 2,
+            (self.height - label_height) // 12,
             label_width,
             label_height,
         )
         self.result_label.setStyleSheet(
-            "font-size: 36px; color: black; background-color: #f0f0f0;"
+            "font-size: 20px; color: black; background-color: #f0f0f0;"
         )
         self.result_label.setAlignment(Qt.AlignCenter)
         self.result_label.show()
@@ -164,8 +164,8 @@ class PatternLearningTask(QWidget):
         mid_x = self.width // 2
         mid_y = self.height // 2
 
-        start_x = mid_x - (self.x_line_num - 1) // 2 * self.cell_size
-        start_y = mid_y - (self.y_line_num - 1) // 2 * self.cell_size
+        start_x = int(mid_x - (self.x_line_num - 1) * self.cell_size / 2)
+        start_y = int(mid_y - (self.y_line_num - 1) * self.cell_size / 2)
 
         for i in range(self.x_line_num):
             sx = start_x + i * self.cell_size  # 線のX座標始点
@@ -187,8 +187,8 @@ class PatternLearningTask(QWidget):
         mid_x = self.width // 2
         mid_y = self.height // 2
 
-        start_x = mid_x - (self.x_line_num - 1) // 2 * self.cell_size
-        start_y = mid_y - (self.y_line_num - 1) // 2 * self.cell_size
+        start_x = int(mid_x - (self.x_line_num - 1) * self.cell_size / 2)
+        start_y = int(mid_y - (self.y_line_num - 1) * self.cell_size / 2)
 
         point_num = self.x_line_num * self.y_line_num
 
