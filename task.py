@@ -49,17 +49,17 @@ class PatternLearningTask(QWidget):
         self.showFullScreen()
         self.setWindowTitle("Pattern Learning Task")
         self.setStyleSheet("background-color: white;")  # Set background color to white
-
-        screen = self.screen()
-        size = screen.size()
-
-        self.width = size.width()
-        self.height = size.height()
-
-        print(f"Screen width: {self.width}, Screen height: {self.height}")
-
+        self.initScreen()
         self.generateIntersectionPoints()
         self.prepareLabel()
+        return
+    
+    def initScreen(self) -> None:
+        screen = self.screen()
+        size = screen.size()
+        self.width = size.width()
+        self.height = size.height()
+        print(f"Screen width: {self.width}, Screen height: {self.height}")
         return
 
     def prepareLabel(self) -> None:
@@ -84,6 +84,7 @@ class PatternLearningTask(QWidget):
     def startTask(self):
         self.waiting_for_start = False
         self.selectRandomTwoPoints()
+        return
 
     def keyPressEvent(self, event: QEvent) -> None:
         if self.waiting_for_start:
@@ -95,8 +96,12 @@ class PatternLearningTask(QWidget):
 
         if not self.key_event_enabled:
             return
+        
+        self.processKeyPress(event.key())
+        return
 
-        user_input = event.key()
+    
+    def processKeyPress(self, user_input):
 
         print(f"User input: {user_input}")
 
@@ -129,6 +134,7 @@ class PatternLearningTask(QWidget):
             self.update()
 
         return
+        
 
     def isSelectedPointsBelowAverage(self) -> bool:
         average = (1 + self.point_num) / 2
