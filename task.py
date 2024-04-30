@@ -1,17 +1,19 @@
 import sys
 import random
 from typing import List
-from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel
 from PyQt5.QtGui import QPainter, QPen, QColor
 from PyQt5.QtCore import Qt, QEvent
 
 
 class Point:
-    def __init__(self, index, x, y, score):
+    def __init__(self, index, x, y, score, trials=50):
         self.index = index
         self.x = x
         self.y = y
         self.score = score
+        self.trials = trials
+        self.trial_count = 0
 
     def __repr__(self):
         return f"Point({self.index}, {self.x}, {self.y}, {self.score})"
@@ -22,13 +24,15 @@ class PatternLearningTask(QWidget):
         super().__init__()
         self.x_line_num = x_line_num
         self.y_line_num = y_line_num
+        self.point_num = x_line_num * y_line_num
         self.cell_size = 120  # Size of each cell
         self.width = None
         self.height = None
-        self.points = None
+        self.points: List[Point] = []
+        self.selected_points: List[Point] = []
         self.initUI()
 
-    def initUI(self):
+    def initUI(self) -> None:
         self.showFullScreen()
         self.setWindowTitle("Pattern Learning Task")
         self.setStyleSheet("background-color: white;")  # Set background color to white
@@ -39,16 +43,68 @@ class PatternLearningTask(QWidget):
         self.width = size.width()
         self.height = size.height()
 
+        self.result_label = QLabel(self)
+        label_width = 200
+        label_height = 100
+        self.result_label.setGeometry(self.width // 2, self.height // 8, label_width, label_height)
+        self.result_label.setStyleSheet("font-size: 36px; color: black;")
+        self.result_label.setText("Start")
+        self.result_label.show()
+
+        self.generateIntersectionPoints()
+
         print(f"Screen width: {self.width}, Screen height: {self.height}")
 
         self.show()
 
+        self.selectRandomTwoPoints()
+        return
+
+    def keyPressEvent(self, event: QEvent) -> None:
+        user_input = event.key()
+        
+        print(f"User input: {user_input}")
+        
+        isBelowAverage = self.isSelectedPointsBelowAverage()
+        correct = False
+
+        if user_input == Qt.Key_L and isBelowAverage:
+            correct = True
+        elif user_input == Qt.Key_O and (not isBelowAverage):
+            correct = True
+
+        status_text = "Correct" if correct else "Incorrect"
+        
+        print(status_text)
+
+        self.result_label.setText(status_text)
+        self.result_label.show()
+
+        self.update()
+
+        return
+
+    def isSelectedPointsBelowAverage(self) -> bool:
+        average = (1 + self.point_num) / 2
+        score_sum = sum([point.score for point in self.selected_points])
+
+        return score_sum < average
+
     def paintEvent(self, event: QEvent) -> None:
         qp = QPainter()
         qp.begin(self)
-        self.generateIntersectionPoints()
         self.drawGrid(qp)
+        self.drawSelectedPoints(qp)
         qp.end()
+        return
+
+    def drawSelectedPoints(self, qp: QPainter) -> None:
+        point_size = 16
+        pen = QPen(Qt.red, point_size, Qt.SolidLine)
+        qp.setPen(pen)
+
+        for point in self.selected_points:
+            qp.drawPoint(point.x, point.y)
 
     def drawGrid(self, qp: QPainter) -> None:
         pen = QPen(Qt.black, 4, Qt.SolidLine)
@@ -106,6 +162,13 @@ class PatternLearningTask(QWidget):
 
         self.points = intersection_points
         print(self.points)
+        return
+
+    def selectRandomTwoPoints(self) -> None:
+        selected_points = random.sample(self.points, 2)
+        self.selected_points = selected_points
+        print(self.selected_points)
+        self.update()
         return
 
 
