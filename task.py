@@ -1,9 +1,10 @@
 import sys
 import random
+from datetime import datetime
 from typing import List
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel
-from PyQt5.QtGui import QPainter, QPen, QColor
-from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QMessageBox
+from PyQt5.QtGui import QPainter, QPen
+from PyQt5.QtCore import Qt, QEvent, QTimer
 
 
 class Point:
@@ -19,15 +20,27 @@ class Point:
         return f"Point({self.index}, {self.x}, {self.y}, {self.score})"
 
 
+class ReactionInfo:
+    def __init__(self, trial_num, key_press_time, is_correct):
+        self.trial_num = trial_num
+        self.key_press_time = key_press_time
+        self.is_correct = is_correct
+
+
 class PatternLearningTask(QWidget):
-    def __init__(self, x_line_num, y_line_num):
+    def __init__(self, x_line_num, y_line_num, trials=50):
         super().__init__()
         self.x_line_num = x_line_num
         self.y_line_num = y_line_num
+        self.trials = trials
+        self.trial_count = 0
         self.point_num = x_line_num * y_line_num
         self.cell_size = 120  # Size of each cell
         self.width = None
         self.height = None
+        self.reactions: List[ReactionInfo] = []
+        self.waiting_for_start = True
+        self.key_event_enabled = False
         self.points: List[Point] = []
         self.selected_points: List[Point] = []
         self.initUI()
@@ -43,44 +56,77 @@ class PatternLearningTask(QWidget):
         self.width = size.width()
         self.height = size.height()
 
-        self.result_label = QLabel(self)
-        label_width = 200
-        label_height = 100
-        self.result_label.setGeometry(self.width // 2, self.height // 8, label_width, label_height)
-        self.result_label.setStyleSheet("font-size: 36px; color: black;")
-        self.result_label.setText("Start")
-        self.result_label.show()
-
-        self.generateIntersectionPoints()
-
         print(f"Screen width: {self.width}, Screen height: {self.height}")
 
-        self.show()
-
-        self.selectRandomTwoPoints()
+        self.generateIntersectionPoints()
+        self.prepareLabel()
         return
 
-    def keyPressEvent(self, event: QEvent) -> None:
-        user_input = event.key()
-        
-        print(f"User input: {user_input}")
-        
-        isBelowAverage = self.isSelectedPointsBelowAverage()
-        correct = False
+    def prepareLabel(self) -> None:
+        self.result_label = QLabel(self)
+        self.result_label.setText("Press Any Key")
+        label_width = 300
+        label_height = 100
 
-        if user_input == Qt.Key_L and isBelowAverage:
-            correct = True
-        elif user_input == Qt.Key_O and (not isBelowAverage):
-            correct = True
-
-        status_text = "Correct" if correct else "Incorrect"
-        
-        print(status_text)
-
-        self.result_label.setText(status_text)
+        self.result_label.setGeometry(
+            (self.width - label_width) // 2 + 50,
+            self.height // 6,
+            label_width,
+            label_height,
+        )
+        self.result_label.setStyleSheet(
+            "font-size: 36px; color: black; background-color: #f0f0f0;"
+        )
+        self.result_label.setAlignment(Qt.AlignCenter)
         self.result_label.show()
+        return
 
-        self.update()
+    def startTask(self):
+        self.waiting_for_start = False
+        self.selectRandomTwoPoints()
+
+    def keyPressEvent(self, event: QEvent) -> None:
+        if self.waiting_for_start:
+            self.result_label.setText("Starting...")
+            self.result_label.show()
+            QTimer.singleShot(1500, self.startTask)
+            self.waiting_for_start = False
+            return
+
+        if not self.key_event_enabled:
+            return
+
+        user_input = event.key()
+
+        print(f"User input: {user_input}")
+
+        if user_input in [Qt.Key_L, Qt.Key_O]:
+            key_press_time = datetime.now()
+            self.key_event_enabled = False
+            isBelowAverage = self.isSelectedPointsBelowAverage()
+
+            is_correct = (user_input == Qt.Key_L and isBelowAverage) or (
+                user_input == Qt.Key_O and not isBelowAverage
+            )
+
+            reaction = ReactionInfo(self.trial_count, key_press_time, is_correct)
+            self.reactions.append(reaction)
+
+            status_text = "Correct" if is_correct else "Incorrect"
+
+            self.result_label.setText(status_text)
+            self.result_label.show()
+
+            self.trial_count += 1
+
+            if self.trial_count > self.trials:
+                QMessageBox.information(self, "Information", "Task is finished")
+                self.close()
+            else:
+                wait_time = 1500  # 1.5 seconds
+                QTimer.singleShot(wait_time, self.selectRandomTwoPoints)
+
+            self.update()
 
         return
 
@@ -99,12 +145,17 @@ class PatternLearningTask(QWidget):
         return
 
     def drawSelectedPoints(self, qp: QPainter) -> None:
-        point_size = 16
-        pen = QPen(Qt.red, point_size, Qt.SolidLine)
+        if not self.key_event_enabled:
+            return
+
+        radius = 16
+        pen_width = 4
+        pen = QPen(Qt.red, pen_width)
         qp.setPen(pen)
+        qp.setBrush(Qt.red)
 
         for point in self.selected_points:
-            qp.drawPoint(point.x, point.y)
+            qp.drawEllipse(point.x - radius, point.y - radius, 2 * radius, 2 * radius)
 
     def drawGrid(self, qp: QPainter) -> None:
         pen = QPen(Qt.black, 4, Qt.SolidLine)
@@ -165,7 +216,9 @@ class PatternLearningTask(QWidget):
         return
 
     def selectRandomTwoPoints(self) -> None:
+        self.result_label.hide()
         selected_points = random.sample(self.points, 2)
+        self.key_event_enabled = True
         self.selected_points = selected_points
         print(self.selected_points)
         self.update()
