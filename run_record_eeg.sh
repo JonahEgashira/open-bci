@@ -10,5 +10,5 @@ if [ -z "$device" ]; then
 else
     echo "Found device: $device"
     # Execute the Python script with the device ID as an argument
-    python3 get_data.py --serial-port "$device"
+    python3 record_eeg.py --serial-port "$device"
 fi
