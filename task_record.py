@@ -370,10 +370,10 @@ def main():
     board = set_up_board()
 
     eeg_handler = EEGHandler(board)
+    
+    app = QApplication(sys.argv)
 
     task = PatternLearningTask(board, eeg_handler)
-
-    app = QApplication(sys.argv)
 
     sys.exit(app.exec_())
 
