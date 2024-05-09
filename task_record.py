@@ -5,6 +5,7 @@ import random
 import threading
 import numpy as np
 import logging
+import os
 
 import brainflow
 from brainflow.board_shim import (
@@ -267,8 +268,13 @@ class EEGHandler:
 
             logging.info("Start streaming")
 
-            current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            file_name = f"eeg_data_{current_time}.csv"
+            data_dir = "./data"
+
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir)
+
+            current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_path = f"{data_dir}/eeg_data_{current_time}.csv"
 
             while not self.stop_signal:
                 data = self.board.get_board_data()
@@ -276,7 +282,7 @@ class EEGHandler:
 
                 eeg_data = data[eeg_channels, :]
 
-                DataFilter.write_file(eeg_data, file_name, "a")
+                DataFilter.write_file(eeg_data, file_path, "a")
 
         except BrainFlowError as e:
             logging.warning(e)
