@@ -1,5 +1,25 @@
+import argparse
+import time
 import sys
 import random
+import threading
+import numpy as np
+import logging
+
+import brainflow
+from brainflow.board_shim import (
+    BoardShim,
+    BrainFlowInputParams,
+    BoardIds,
+    BrainFlowError,
+)
+from brainflow.data_filter import (
+    DataFilter,
+    FilterTypes,
+    AggOperations,
+    DetrendOperations,
+)
+
 from datetime import datetime
 from typing import List
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QMessageBox
@@ -8,12 +28,11 @@ from PyQt5.QtCore import Qt, QEvent, QTimer
 
 
 class Point:
-    def __init__(self, index, x, y, score, trials=50):
+    def __init__(self, index, x, y, score):
         self.index = index
         self.x = x
         self.y = y
         self.score = score
-        self.trials = trials
         self.trial_count = 0
 
     def __repr__(self):
@@ -28,13 +47,18 @@ class ReactionInfo:
 
 
 class PatternLearningTask(QWidget):
-    def __init__(self, x_line_num, y_line_num, trials=50):
+    def __init__(self, board, eeg_handler):
         super().__init__()
-        self.x_line_num = x_line_num
-        self.y_line_num = y_line_num
-        self.trials = trials
+        self.board = board
+        self.eeg_handler = eeg_handler
+        self.eeg_thread = threading.Thread(target=self.eeg_handler.collect_data)
+        self.eeg_thread.start()
+
+        self.x_line_num = 4
+        self.y_line_num = 4
+        self.trials = 3
         self.trial_count = 0
-        self.point_num = x_line_num * y_line_num
+        self.point_num = self.x_line_num * self.y_line_num
         self.cell_size = 120  # Size of each cell
         self.width = None
         self.height = None
@@ -61,6 +85,12 @@ class PatternLearningTask(QWidget):
         self.height = size.height()
         print(f"Screen width: {self.width}, Screen height: {self.height}")
         return
+
+    def closeEvent(self, event):
+        logging.info("Closing the application")
+        self.eeg_handler.stop()
+        self.eeg_thread.join()
+        super().closeEvent(event)
 
     def prepareLabel(self) -> None:
         self.result_label = QLabel(self)
@@ -101,9 +131,6 @@ class PatternLearningTask(QWidget):
         return
 
     def processKeyPress(self, user_input):
-
-        print(f"User input: {user_input}")
-
         if user_input in [Qt.Key_L, Qt.Key_O]:
             key_press_time = datetime.now()
             self.key_event_enabled = False
@@ -120,15 +147,10 @@ class PatternLearningTask(QWidget):
 
             self.result_label.setText(status_text)
             self.result_label.show()
-
             self.trial_count += 1
 
-            if self.trial_count > self.trials:
-                QMessageBox.information(self, "Information", "Task is finished")
-                self.close()
-            else:
-                wait_time = 1500  # 1.5 seconds
-                QTimer.singleShot(wait_time, self.selectRandomTwoPoints)
+            wait_time = 1500  # 1.5 seconds
+            QTimer.singleShot(wait_time, self.selectRandomTwoPoints)
 
             self.update()
 
@@ -220,6 +242,10 @@ class PatternLearningTask(QWidget):
         return
 
     def selectRandomTwoPoints(self) -> None:
+        if self.trial_count >= self.trials:
+            QMessageBox.information(self, "Information", "Fin")
+            self.close()
+
         self.result_label.hide()
         selected_points = random.sample(self.points, 2)
         self.key_event_enabled = True
@@ -229,9 +255,128 @@ class PatternLearningTask(QWidget):
         return
 
 
-if __name__ == "__main__":
+class EEGHandler:
+    def __init__(self, board):
+        self.board = board
+        self.stop_signal = False
+
+    def collect_data(self):
+        try:
+            self.board.prepare_session()
+            self.board.start_stream()
+
+            logging.info("Start streaming")
+
+            while not self.stop_signal:
+                data = self.board.get_board_data()
+                eeg_channels = self.board.get_eeg_channels(self.board.board_id)
+
+                eeg_data = data[eeg_channels, :]
+
+                DataFilter.write_file(eeg_data, "task_eeg.csv", "a")
+
+        except BrainFlowError as e:
+            logging.warning(e)
+
+        finally:
+            if self.board.is_prepared():
+                self.board.stop_stream()
+                self.board.release_session()
+                print("End of EEG data collection")
+                return
+
+    def stop(self):
+        self.stop_signal = True
+        return
+
+
+def set_up_board():
+    parser = argparse.ArgumentParser()
+    # use docs to check which parameters are required for specific board, e.g. for Cyton - set serial port
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        help="timeout for device discovery or connection",
+        required=False,
+        default=0,
+    )
+    parser.add_argument(
+        "--ip-port", type=int, help="ip port", required=False, default=0
+    )
+    parser.add_argument(
+        "--ip-protocol",
+        type=int,
+        help="ip protocol, check IpProtocolType enum",
+        required=False,
+        default=0,
+    )
+    parser.add_argument(
+        "--ip-address", type=str, help="ip address", required=False, default=""
+    )
+    parser.add_argument(
+        "--serial-port", type=str, help="serial port", required=True, default=""
+    )
+    parser.add_argument(
+        "--mac-address", type=str, help="mac address", required=False, default=""
+    )
+    parser.add_argument(
+        "--other-info", type=str, help="other info", required=False, default=""
+    )
+    parser.add_argument(
+        "--streamer-params",
+        type=str,
+        help="streamer params",
+        required=False,
+        default="",
+    )
+    parser.add_argument(
+        "--serial-number", type=str, help="serial number", required=False, default=""
+    )
+    parser.add_argument(
+        "--board-id",
+        type=int,
+        help="board id, check docs to get a list of supported boards",
+        required=False,
+    )
+    parser.add_argument("--file", type=str, help="file", required=False, default="")
+    parser.add_argument("--log", action="store_true")
+    args = parser.parse_args()
+
+    params = BrainFlowInputParams()
+    params.ip_port = args.ip_port
+    params.serial_port = args.serial_port
+    params.mac_address = args.mac_address
+    params.other_info = args.other_info
+    params.serial_number = args.serial_number
+    params.ip_address = args.ip_address
+    params.ip_protocol = args.ip_protocol
+    params.timeout = args.timeout
+    params.file = args.file
+
+    print("args: ", args)
+
+    if args.log:
+        BoardShim.enable_dev_board_logger()
+    else:
+        BoardShim.disable_board_logger()
+
+    try:
+        board = BoardShim(BoardIds.CYTON_BOARD, params)
+        return board
+    except BaseException as e:
+        logging.warning("Exception", exc_info=True)
+
+def main():
+    board = set_up_board()
+
+    eeg_handler = EEGHandler(board)
+
+    task = PatternLearningTask(board, eeg_handler)
+
     app = QApplication(sys.argv)
-    x_line_num = 4
-    y_line_num = 4
-    task = PatternLearningTask(x_line_num, y_line_num)
+
     sys.exit(app.exec_())
+
+
+if __name__ == "__main__":
+    main()
