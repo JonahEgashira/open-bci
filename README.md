@@ -17,7 +17,7 @@
     `pip install -r requirements.txt`
 
 - スクリプトを実行可能にする
-    `chmod+x run_get_data.sh`
+    `chmod+x run_task_record.sh`
 
-- 実行  `./run_get_data`
-    - run_get_data.sh の中でOpenBCIドングルを認識して、get_data.py が呼ばれています。
+- 実行  `./run_task_record`
+    - run_task_record.sh の中でOpenBCIドングルを認識して、task_record.py が呼ばれています。
