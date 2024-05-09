@@ -60,6 +60,7 @@ class PatternLearningTask(QWidget):
         self.trial_count = 0
         self.point_num = self.x_line_num * self.y_line_num
         self.cell_size = 120  # Size of each cell
+        self.wait_time = 1500 # 1500 ms
         self.width = None
         self.height = None
         self.reactions: List[ReactionInfo] = []
@@ -120,7 +121,7 @@ class PatternLearningTask(QWidget):
         if self.waiting_for_start:
             self.result_label.setText("Starting...")
             self.result_label.show()
-            QTimer.singleShot(1500, self.startTask)
+            QTimer.singleShot(self.wait_time, self.startTask)
             self.waiting_for_start = False
             return
 
@@ -149,8 +150,7 @@ class PatternLearningTask(QWidget):
             self.result_label.show()
             self.trial_count += 1
 
-            wait_time = 1500  # 1.5 seconds
-            QTimer.singleShot(wait_time, self.selectRandomTwoPoints)
+            QTimer.singleShot(self.wait_time, self.selectRandomTwoPoints)
 
             self.update()
 
@@ -267,13 +267,16 @@ class EEGHandler:
 
             logging.info("Start streaming")
 
+            current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            file_name = f"eeg_data_{current_time}.csv"
+
             while not self.stop_signal:
                 data = self.board.get_board_data()
                 eeg_channels = self.board.get_eeg_channels(self.board.board_id)
 
                 eeg_data = data[eeg_channels, :]
 
-                DataFilter.write_file(eeg_data, "task_eeg.csv", "a")
+                DataFilter.write_file(eeg_data, file_name, "a")
 
         except BrainFlowError as e:
             logging.warning(e)
