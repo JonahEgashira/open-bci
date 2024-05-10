@@ -263,7 +263,7 @@ class PatternLearningTask(QWidget):
 class DirectoryHandler:
     def __init__(self):
         self.time_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     def create_directory(self):
         if not os.path.exists("./data"):
             os.makedirs("./data")
@@ -273,6 +273,7 @@ class DirectoryHandler:
 
     def get_directory_path(self):
         return f"./data/{self.time_stamp}"
+
 
 class ResponseHandler:
     def __init__(self):
@@ -306,7 +307,7 @@ class ResponseHandler:
         df = pd.DataFrame(data)
         file_name = "response_data.csv"
         file_path = f"{directory_path}/{file_name}"
-        df.to_csv(file_path, index=False, float_format='%.5f')
+        df.to_csv(file_path, index=False, float_format="%.5f")
         print(f"Data written to {file_path}")
 
 
