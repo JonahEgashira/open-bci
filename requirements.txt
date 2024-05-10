@@ -15,6 +15,7 @@ mne==1.7.0
 nptyping==1.4.4
 numpy==1.26.4
 packaging==24.0
+pandas==2.2.2
 pillow==10.3.0
 platformdirs==4.2.1
 pooch==1.8.1
@@ -27,9 +28,11 @@ PyQt6-sip==13.6.0
 pyqtgraph==0.13.6
 python-dateutil==2.9.0.post0
 python-osc==1.8.3
+pytz==2024.1
 requests==2.31.0
 scipy==1.13.0
 six==1.16.0
 tqdm==4.66.2
 typish==1.9.3
+tzdata==2024.1
 urllib3==2.2.1

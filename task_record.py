@@ -4,6 +4,7 @@ import sys
 import random
 import threading
 import numpy as np
+import pandas as pd
 import logging
 import os
 
@@ -48,12 +49,12 @@ class ReactionInfo:
 
 
 class PatternLearningTask(QWidget):
-    def __init__(self, board, eeg_handler):
+    def __init__(self, board, eeg_handler, response_handler):
         super().__init__()
         self.board = board
         self.eeg_handler = eeg_handler
         self.eeg_thread = threading.Thread(target=self.eeg_handler.collect_data)
-        self.eeg_thread.start()
+        self.response_handler = response_handler
 
         self.x_line_num = 4
         self.y_line_num = 4
@@ -61,7 +62,7 @@ class PatternLearningTask(QWidget):
         self.trial_count = 0
         self.point_num = self.x_line_num * self.y_line_num
         self.cell_size = 120  # Size of each cell
-        self.wait_time = 1500 # 1500 ms
+        self.wait_time = 1500  # 1500 ms
         self.width = None
         self.height = None
         self.reactions: List[ReactionInfo] = []
@@ -115,6 +116,8 @@ class PatternLearningTask(QWidget):
 
     def startTask(self):
         self.waiting_for_start = False
+        self.response_handler.start()
+        self.eeg_thread.start()
         self.selectRandomTwoPoints()
         return
 
@@ -136,10 +139,10 @@ class PatternLearningTask(QWidget):
         if user_input in [Qt.Key_L, Qt.Key_O]:
             key_press_time = datetime.now()
             self.key_event_enabled = False
-            isBelowAverage = self.isSelectedPointsBelowAverage()
+            is_below_average = self.isSelectedPointsBelowAverage()
 
-            is_correct = (user_input == Qt.Key_L and isBelowAverage) or (
-                user_input == Qt.Key_O and not isBelowAverage
+            is_correct = (user_input == Qt.Key_L and is_below_average) or (
+                user_input == Qt.Key_O and not is_below_average
             )
 
             reaction = ReactionInfo(self.trial_count, key_press_time, is_correct)
@@ -241,11 +244,15 @@ class PatternLearningTask(QWidget):
         self.points = intersection_points
         print(self.points)
         return
+    
+    def end_task(self):
+        QMessageBox.information(self, "Information", "Fin")
+        self.response_handler.write_data("response_data.csv")
+        self.close()
 
     def selectRandomTwoPoints(self) -> None:
         if self.trial_count >= self.trials:
-            QMessageBox.information(self, "Information", "Fin")
-            self.close()
+            self.end_task()
 
         self.result_label.hide()
         selected_points = random.sample(self.points, 2)
@@ -254,6 +261,40 @@ class PatternLearningTask(QWidget):
         print(self.selected_points)
         self.update()
         return
+
+
+class ResponseHandler:
+    def __init__(self):
+        self.start_time = None
+        self.cue_times = []
+        self.reaction_times = []
+        self.correct_responses = []
+
+    def start(self):
+        self.start_time = time.time()
+
+    def add_cue_time(self):
+        current_time = time.time()
+        self.cue_times.append(current_time - self.start_time)
+
+    def add_reaction_time(self):
+        current_time = time.time()
+        self.reaction_times.append(current_time - self.start_time)
+
+    def add_correct_response(self, is_correct):
+        value = 1 if is_correct else 0
+        self.correct_responses.append(value)
+
+    def write_data(self, file_path):
+        data = {
+            "cue_times": self.cue_times,
+            "reaction_times": self.reaction_times,
+            "correct_responses": self.correct_responses,
+        }
+
+        df = pd.DataFrame(data)
+        df.to_csv(file_path, index=False)
+        print(f"Data written to {file_path}")
 
 
 class EEGHandler:
@@ -375,14 +416,17 @@ def set_up_board():
     except BaseException as e:
         logging.warning("Exception", exc_info=True)
 
+
 def main():
     board = set_up_board()
 
     eeg_handler = EEGHandler(board)
-    
+
+    response_handler = ResponseHandler()
+
     app = QApplication(sys.argv)
 
-    task = PatternLearningTask(board, eeg_handler)
+    task = PatternLearningTask(board, eeg_handler, response_handler)
 
     sys.exit(app.exec_())
 
