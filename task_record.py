@@ -41,20 +41,14 @@ class Point:
         return f"Point({self.index}, {self.x}, {self.y}, {self.score})"
 
 
-class ReactionInfo:
-    def __init__(self, trial_num, key_press_time, is_correct):
-        self.trial_num = trial_num
-        self.key_press_time = key_press_time
-        self.is_correct = is_correct
-
-
 class PatternLearningTask(QWidget):
-    def __init__(self, board, eeg_handler, response_handler):
+    def __init__(self, board):
         super().__init__()
         self.board = board
-        self.eeg_handler = eeg_handler
+        self.directory_handler = DirectoryHandler()
+        self.eeg_handler = EEGHandler(self.board, self.directory_handler)
         self.eeg_thread = threading.Thread(target=self.eeg_handler.collect_data)
-        self.response_handler = response_handler
+        self.response_handler = ResponseHandler()
 
         self.x_line_num = 4
         self.y_line_num = 4
@@ -119,6 +113,7 @@ class PatternLearningTask(QWidget):
         self.response_handler.start()
         self.eeg_thread.start()
         self.selectRandomTwoPoints()
+        self.directory_handler.create_directory()
         return
 
     def keyPressEvent(self, event: QEvent) -> None:
@@ -137,7 +132,7 @@ class PatternLearningTask(QWidget):
 
     def processKeyPress(self, user_input):
         if user_input in [Qt.Key_L, Qt.Key_O]:
-            key_press_time = datetime.now()
+            self.response_handler.add_reaction_time()
             self.key_event_enabled = False
             is_below_average = self.isSelectedPointsBelowAverage()
 
@@ -145,8 +140,7 @@ class PatternLearningTask(QWidget):
                 user_input == Qt.Key_O and not is_below_average
             )
 
-            reaction = ReactionInfo(self.trial_count, key_press_time, is_correct)
-            self.reactions.append(reaction)
+            self.response_handler.add_correct_response(is_correct)
 
             status_text = "Correct" if is_correct else "Incorrect"
 
@@ -244,10 +238,10 @@ class PatternLearningTask(QWidget):
         self.points = intersection_points
         print(self.points)
         return
-    
+
     def end_task(self):
         QMessageBox.information(self, "Information", "Fin")
-        self.response_handler.write_data("response_data.csv")
+        self.response_handler.write_data(self.directory_handler.get_directory_path())
         self.close()
 
     def selectRandomTwoPoints(self) -> None:
@@ -257,11 +251,28 @@ class PatternLearningTask(QWidget):
         self.result_label.hide()
         selected_points = random.sample(self.points, 2)
         self.key_event_enabled = True
+
+        self.response_handler.add_cue_time()
+
         self.selected_points = selected_points
         print(self.selected_points)
         self.update()
         return
 
+
+class DirectoryHandler:
+    def __init__(self):
+        self.time_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    def create_directory(self):
+        if not os.path.exists("./data"):
+            os.makedirs("./data")
+
+        if not os.path.exists(f"./data/{self.time_stamp}"):
+            os.makedirs(f"./data/{self.time_stamp}")
+
+    def get_directory_path(self):
+        return f"./data/{self.time_stamp}"
 
 class ResponseHandler:
     def __init__(self):
@@ -285,7 +296,7 @@ class ResponseHandler:
         value = 1 if is_correct else 0
         self.correct_responses.append(value)
 
-    def write_data(self, file_path):
+    def write_data(self, directory_path):
         data = {
             "cue_times": self.cue_times,
             "reaction_times": self.reaction_times,
@@ -293,14 +304,17 @@ class ResponseHandler:
         }
 
         df = pd.DataFrame(data)
-        df.to_csv(file_path, index=False)
+        file_name = "response_data.csv"
+        file_path = f"{directory_path}/{file_name}"
+        df.to_csv(file_path, index=False, float_format='%.5f')
         print(f"Data written to {file_path}")
 
 
 class EEGHandler:
-    def __init__(self, board):
+    def __init__(self, board, directory_handler):
         self.board = board
         self.stop_signal = False
+        self.directory_handler = directory_handler
 
     def collect_data(self):
         try:
@@ -314,8 +328,8 @@ class EEGHandler:
             if not os.path.exists(data_dir):
                 os.makedirs(data_dir)
 
-            current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_path = f"{data_dir}/eeg_data_{current_time}.csv"
+            directory_path = self.directory_handler.get_directory_path()
+            file_path = f"{directory_path}/eeg_data.csv"
 
             while not self.stop_signal:
                 data = self.board.get_board_data()
@@ -420,13 +434,9 @@ def set_up_board():
 def main():
     board = set_up_board()
 
-    eeg_handler = EEGHandler(board)
-
-    response_handler = ResponseHandler()
-
     app = QApplication(sys.argv)
 
-    task = PatternLearningTask(board, eeg_handler, response_handler)
+    task = PatternLearningTask(board)
 
     sys.exit(app.exec_())
 
