@@ -52,7 +52,7 @@ class PatternLearningTask(QWidget):
 
         self.x_line_num = 4
         self.y_line_num = 4
-        self.trials = 3
+        self.trials = 20
         self.trial_count = 0
         self.point_num = self.x_line_num * self.y_line_num
         self.cell_size = 120  # Size of each cell
@@ -157,6 +157,8 @@ class PatternLearningTask(QWidget):
     def isSelectedPointsBelowAverage(self) -> bool:
         average = (1 + self.point_num) / 2
         score_sum = sum([point.score for point in self.selected_points])
+
+        print(f"Average: {average}, Score Sum: {score_sum}")
 
         return score_sum < average
 
@@ -322,7 +324,8 @@ class EEGHandler:
             self.board.prepare_session()
             self.board.start_stream()
 
-            logging.info("Start streaming")
+            print("Start streaming")
+            print("Sfreq: ", self.board.get_sampling_rate(BoardIds.CYTON_BOARD))
 
             data_dir = "./data"
 
