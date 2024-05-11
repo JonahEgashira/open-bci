@@ -1,6 +1,7 @@
 import argparse
 import time
 import sys
+import queue
 import threading
 import numpy as np
 import pandas as pd
@@ -155,13 +156,14 @@ class EEGHandler:
         self.directory_handler = directory_handler
         self.start_time = None
         self.current_label = None
+        self.label_queue = queue.Queue()
         if channels is None:
             self.channels = [1, 2, 3, 4, 5, 6, 7, 8]
         else:
             self.channels = channels
 
     def set_label(self, label):
-        self.current_label = label
+        self.label.queue.put(label)
 
     def collect_data(self):
         try:
@@ -184,26 +186,24 @@ class EEGHandler:
             label_list = []
 
             while not self.stop_signal:
-                data = self.board.get_board_data()
-                eeg_channels = self.board.get_eeg_channels(self.board.board_id)
-                selected_channels = [
-                    eeg_channels[c - 1] for c in self.channels
-                ]  # 指定されたチャンネルに対応するインデックスを取得
-                eeg_data = data[selected_channels, :]
+                if not self.label_queue.empty():
+                    self.current_label = self.label_queue.get()
+                    data = self.board.get_board_data()  # ラベル更新時のみデータを取得
+                    eeg_channels = self.board.get_eeg_channels(self.board.board_id)
+                    selected_channels = [eeg_channels[c - 1] for c in self.channels]
+                    eeg_data = data[selected_channels, :]
 
-                # タイムスタンプの計算
-                num_samples = eeg_data.shape[1]
-                timestamps = np.arange(num_samples) / self.board.get_sampling_rate(
-                    BoardIds.CYTON_BOARD
-                )
-                timestamps += time.time() - self.start_time
+                    # タイムスタンプの計算
+                    num_samples = eeg_data.shape[1]
+                    timestamps = np.arange(num_samples) / self.board.get_sampling_rate(BoardIds.CYTON_BOARD)
+                    timestamps += time.time() - self.start_time
 
-                # ラベルの取得
-                labels = np.full(num_samples, self.current_label)
+                    # ラベルの適用
+                    labels = np.full(num_samples, self.current_label)
 
-                eeg_data_list.append(eeg_data.T)
-                timestamp_list.append(timestamps)
-                label_list.append(labels)
+                    eeg_data_list.append(eeg_data.T)
+                    timestamp_list.append(timestamps)
+                    label_list.append(labels)
 
             # データをまとめて処理
             eeg_data_concat = np.concatenate(eeg_data_list, axis=0)
