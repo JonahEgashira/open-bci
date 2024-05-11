@@ -29,12 +29,14 @@ from PyQt5.QtGui import QPainter, QPen
 from PyQt5.QtCore import Qt, QEvent, QTimer
 
 
+DEFAULT_CHANNELS = [7] # C3 channel
+
 class MotorImageryTask(QWidget):
     def __init__(self, board):
         super().__init__()
         self.board = board
         self.directory_handler = DirectoryHandler()
-        self.eeg_handler = EEGHandler(self.board, self.directory_handler)
+        self.eeg_handler = EEGHandler(self.board, self.directory_handler, DEFAULT_CHANNELS)
         self.eeg_thread = threading.Thread(target=self.eeg_handler.collect_data)
 
         self.trials = 3
@@ -88,7 +90,6 @@ class MotorImageryTask(QWidget):
 
     def startTask(self):
         self.waiting_for_start = False
-        self.response_handler.start()
         self.eeg_thread.start()
         self.showInstruction()
         self.directory_handler.create_directory()
@@ -109,20 +110,20 @@ class MotorImageryTask(QWidget):
 
         if self.trial_count % 2 == 0:
             instruction = "Imagine grasping your right hand"
+            label = 1
         else:
             instruction = "Rest"
+            label = 0
 
+        self.eeg_handler.set_label(label)
         self.instruction_label.setText(instruction)
         self.instruction_label.show()
         self.trial_count += 1
-
-        self.response_handler.add_cue_time()
 
         QTimer.singleShot(self.wait_time, self.showInstruction)
 
     def end_task(self):
         QMessageBox.information(self, "Information", "Task Completed")
-        self.response_handler.write_data(self.directory_handler.get_directory_path())
         self.close()
 
 
@@ -141,48 +142,20 @@ class DirectoryHandler:
         return f"./data/{self.time_stamp}"
 
 
-class ResponseHandler:
-    def __init__(self):
-        self.start_time = None
-        self.cue_times = []
-        self.reaction_times = []
-        self.correct_responses = []
-
-    def start(self):
-        self.start_time = time.time()
-
-    def add_cue_time(self):
-        current_time = time.time()
-        self.cue_times.append(current_time - self.start_time)
-
-    def add_reaction_time(self):
-        current_time = time.time()
-        self.reaction_times.append(current_time - self.start_time)
-
-    def add_correct_response(self, is_correct):
-        value = 1 if is_correct else 0
-        self.correct_responses.append(value)
-
-    def write_data(self, directory_path):
-        data = {
-            "cue_times": self.cue_times,
-            "reaction_times": self.reaction_times,
-            "correct_responses": self.correct_responses,
-        }
-
-        df = pd.DataFrame(data)
-        file_name = "response_data.csv"
-        file_path = f"{directory_path}/{file_name}"
-        df.to_csv(file_path, index=False, float_format="%.5f")
-        print(f"Data written to {file_path}")
-
-
 class EEGHandler:
-    def __init__(self, board, directory_handler):
+    def __init__(self, board, directory_handler, channels=None):
         self.board = board
         self.stop_signal = False
         self.directory_handler = directory_handler
         self.start_time = None
+        self.current_label = None
+        if channels is None:
+            self.channels = [1, 2, 3, 4, 5, 6, 7, 8]
+        else:
+            self.channels = channels
+    
+    def set_label(self, label):
+        self.current_label = label
 
     def collect_data(self):
         try:
@@ -207,15 +180,16 @@ class EEGHandler:
             while not self.stop_signal:
                 data = self.board.get_board_data()
                 eeg_channels = self.board.get_eeg_channels(self.board.board_id)
-                eeg_data = data[eeg_channels, :]
+                selected_channels = [eeg_channels[c - 1] for c in self.channels]  # 指定されたチャンネルに対応するインデックスを取得
+                eeg_data = data[selected_channels, :]
 
                 # タイムスタンプの計算
                 num_samples = eeg_data.shape[1]
                 timestamps = np.arange(num_samples) / self.board.get_sampling_rate(BoardIds.CYTON_BOARD)
                 timestamps += time.time() - self.start_time
 
-                # ラベルの取得（この部分は実際のタスクに応じて修正が必要）
-                labels = np.zeros(num_samples)
+                # ラベルの取得
+                labels = np.full(num_samples, self.current_label)
 
                 eeg_data_list.append(eeg_data.T)
                 timestamp_list.append(timestamps)
@@ -243,6 +217,9 @@ class EEGHandler:
                 self.board.release_session()
                 print("End of EEG data collection")
             return
+    
+    def stop(self):
+        self.stop_signal = True
 
 def set_up_board():
     parser = argparse.ArgumentParser()
