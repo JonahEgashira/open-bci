@@ -3,12 +3,10 @@ import time
 import sys
 import random
 import threading
-import numpy as np
 import pandas as pd
 import logging
 import os
 
-import brainflow
 from brainflow.board_shim import (
     BoardShim,
     BrainFlowInputParams,
@@ -17,9 +15,6 @@ from brainflow.board_shim import (
 )
 from brainflow.data_filter import (
     DataFilter,
-    FilterTypes,
-    AggOperations,
-    DetrendOperations,
 )
 
 from datetime import datetime
@@ -59,7 +54,6 @@ class PatternLearningTask(QWidget):
         self.wait_time = 1500  # 1500 ms
         self.width = None
         self.height = None
-        self.reactions: List[ReactionInfo] = []
         self.waiting_for_start = True
         self.key_event_enabled = False
         self.points: List[Point] = []

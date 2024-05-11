@@ -1,50 +1,43 @@
 import argparse
 import time
 import sys
-import random
 import threading
 import numpy as np
 import pandas as pd
 import logging
 import os
 
-import brainflow
 from brainflow.board_shim import (
     BoardShim,
     BrainFlowInputParams,
     BoardIds,
     BrainFlowError,
 )
-from brainflow.data_filter import (
-    DataFilter,
-    FilterTypes,
-    AggOperations,
-    DetrendOperations,
-)
 
 from datetime import datetime
-from typing import List
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QMessageBox
-from PyQt5.QtGui import QPainter, QPen
 from PyQt5.QtCore import Qt, QEvent, QTimer
 
 
-DEFAULT_CHANNELS = [7] # C3 channel
+DEFAULT_CHANNELS = [7]  # C3 channel
+
 
 class MotorImageryTask(QWidget):
     def __init__(self, board):
         super().__init__()
         self.board = board
         self.directory_handler = DirectoryHandler()
-        self.eeg_handler = EEGHandler(self.board, self.directory_handler, DEFAULT_CHANNELS)
+        self.eeg_handler = EEGHandler(
+            self.board, self.directory_handler, DEFAULT_CHANNELS
+        )
         self.eeg_thread = threading.Thread(target=self.eeg_handler.collect_data)
 
-        self.trials = 3
+        self.trials = 2
         self.trial_count = 0
-        self.wait_time = 5000  # 5000 ms
         self.width = None
         self.height = None
         self.waiting_for_start = True
+        self.start_wait_time = 2000
         self.initUI()
 
     def initUI(self) -> None:
@@ -99,28 +92,41 @@ class MotorImageryTask(QWidget):
         if self.waiting_for_start:
             self.instruction_label.setText("Starting...")
             self.instruction_label.show()
-            QTimer.singleShot(self.wait_time, self.startTask)
+            QTimer.singleShot(self.start_wait_time, self.startTask)
             self.waiting_for_start = False
             return
 
     def showInstruction(self):
-        if self.trial_count >= self.trials:
+        instruction_number = 4
+
+        if self.trial_count >= self.trials * instruction_number:
             self.end_task()
             return
 
-        if self.trial_count % 2 == 0:
-            instruction = "Imagine grasping your right hand"
-            label = 1
-        else:
-            instruction = "Rest"
+        if self.trial_count % 4 == 0:
+            instruction = "Imagine"
             label = 0
+            wait_time = 5000
+        elif self.trial_count % 4 == 1:
+            instruction = "Relax"
+            label = 1
+            wait_time = 1000
+        elif self.trial_count % 4 == 2:
+            instruction = "Rest"
+            label = 2
+            wait_time = 5000
+        else:
+            instruction = "Ready"
+            label = 3
+            wait_time = 1000
 
-        self.eeg_handler.set_label(label)
         self.instruction_label.setText(instruction)
         self.instruction_label.show()
         self.trial_count += 1
 
-        QTimer.singleShot(self.wait_time, self.showInstruction)
+        self.eeg_handler.set_label(label)
+
+        QTimer.singleShot(wait_time, self.showInstruction)
 
     def end_task(self):
         QMessageBox.information(self, "Information", "Task Completed")
@@ -153,7 +159,7 @@ class EEGHandler:
             self.channels = [1, 2, 3, 4, 5, 6, 7, 8]
         else:
             self.channels = channels
-    
+
     def set_label(self, label):
         self.current_label = label
 
@@ -180,12 +186,16 @@ class EEGHandler:
             while not self.stop_signal:
                 data = self.board.get_board_data()
                 eeg_channels = self.board.get_eeg_channels(self.board.board_id)
-                selected_channels = [eeg_channels[c - 1] for c in self.channels]  # 指定されたチャンネルに対応するインデックスを取得
+                selected_channels = [
+                    eeg_channels[c - 1] for c in self.channels
+                ]  # 指定されたチャンネルに対応するインデックスを取得
                 eeg_data = data[selected_channels, :]
 
                 # タイムスタンプの計算
                 num_samples = eeg_data.shape[1]
-                timestamps = np.arange(num_samples) / self.board.get_sampling_rate(BoardIds.CYTON_BOARD)
+                timestamps = np.arange(num_samples) / self.board.get_sampling_rate(
+                    BoardIds.CYTON_BOARD
+                )
                 timestamps += time.time() - self.start_time
 
                 # ラベルの取得
@@ -201,9 +211,12 @@ class EEGHandler:
             label_concat = np.concatenate(label_list)
 
             # データフレームの作成
-            data = pd.DataFrame(eeg_data_concat, columns=[f'channel_{i+1}' for i in range(eeg_data_concat.shape[1])])
-            data['timestamp'] = timestamp_concat
-            data['label'] = label_concat
+            data = pd.DataFrame(
+                eeg_data_concat,
+                columns=[f"channel_{i+1}" for i in range(eeg_data_concat.shape[1])],
+            )
+            data["timestamp"] = timestamp_concat
+            data["label"] = label_concat
 
             # CSVファイルに保存
             data.to_csv(file_path, index=False)
@@ -217,9 +230,10 @@ class EEGHandler:
                 self.board.release_session()
                 print("End of EEG data collection")
             return
-    
+
     def stop(self):
         self.stop_signal = True
+
 
 def set_up_board():
     parser = argparse.ArgumentParser()
@@ -303,7 +317,7 @@ def main():
 
     app = QApplication(sys.argv)
 
-    task = MotorImageryTask(board)
+    MotorImageryTask(board)
 
     sys.exit(app.exec_())
 
