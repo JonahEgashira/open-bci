@@ -3,7 +3,6 @@ import time
 import sys
 import queue
 import numpy as np
-import pandas as pd
 import logging
 import os
 
@@ -102,7 +101,7 @@ class MotorImageryTask(QWidget):
         current_time = time.time()
         current_time_formatted = datetime.fromtimestamp(current_time).strftime("%H%M%S")
         print(f"Current time: {current_time_formatted}")
-        instruction_number = 2
+        instruction_number = 4
 
         if self.trial_count >= self.trials * instruction_number:
             self.end_task()
@@ -111,10 +110,18 @@ class MotorImageryTask(QWidget):
         if self.trial_count % instruction_number == 0:
             instruction = "Imagine"
             label = 0
-            wait_time = 2000
-        else:
+            wait_time = 5000
+        elif self.trial_count % instruction_number == 1:
             instruction = "Relax"
             label = 1
+            wait_time = 2000
+        elif self.trial_count % instruction_number == 2:
+            instruction = "Rest"
+            label = 2
+            wait_time = 5000
+        else:
+            instruction = "Ready..."
+            label = 3
             wait_time = 2000
 
         self.instruction_label.setText(instruction)
@@ -125,7 +132,7 @@ class MotorImageryTask(QWidget):
 
         self.eeg_handler.start_data_collection(label)
 
-        QTimer.singleShot(2000, self.stop_data_collection)  # 2000ms後にデータ収集停止
+        QTimer.singleShot(wait_time, self.stop_data_collection)
 
     def stop_data_collection(self):
         self.eeg_handler.stop_data_collection()
@@ -233,8 +240,12 @@ class EEGHandler:
     def save_data(self):
         file_path = self.get_data_file()
         data = np.concatenate(self.data_storage, axis=0)
-        df = pd.DataFrame(data)
-        df.to_csv(file_path, index=False, header=False)
+
+        # ラベルの列を整数に変換
+        data[:, -1] = data[:, -1].astype(int)
+
+        # fmt で各列のフォーマットを指定
+        np.savetxt(file_path, data, delimiter=",", fmt=["%.3f", "%.3f", "%d"])
         print("Data saved to eeg_data.csv")
 
     def stop(self):
