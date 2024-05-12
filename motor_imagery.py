@@ -1,7 +1,6 @@
 import argparse
 import time
 import sys
-import queue
 import numpy as np
 import logging
 import os
@@ -14,7 +13,7 @@ from brainflow.board_shim import (
 )
 
 from datetime import datetime
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QMessageBox
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QMessageBox, QProgressBar
 from PyQt5.QtCore import Qt, QEvent, QTimer
 
 
@@ -126,20 +125,45 @@ class MotorImageryTask(QWidget):
 
         self.instruction_label.setText(instruction)
         self.instruction_label.show()
+
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setGeometry(
+            (self.width - self.width // 2) // 2,
+            self.height // 2 + 50,
+            self.width // 2,
+            30,
+        )
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(wait_time)
+        self.progress_bar.setValue(wait_time)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.show()
+
         self.trial_count += 1
 
         print(f"Wait time: {wait_time}")
 
         self.eeg_handler.start_data_collection(label)
 
-        QTimer.singleShot(wait_time, self.stop_data_collection)
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_progress_bar)
+        self.timer.start(10)
+
+    def update_progress_bar(self):
+        current_value = self.progress_bar.value()
+        if current_value > 0:
+            self.progress_bar.setValue(current_value - 10)
+        else:
+            self.timer.stop()
+            self.progress_bar.hide()
+            self.stop_data_collection()
 
     def stop_data_collection(self):
         self.eeg_handler.stop_data_collection()
         self.showInstruction()
 
     def end_task(self):
-        QMessageBox.information(self, "Information", "Task Completed")
+        QMessageBox.information(self, "Info", "Fin.")
         self.eeg_handler.stop()
         self.close()
 
@@ -186,7 +210,7 @@ class EEGHandler:
             print("Sfreq: ", self.board.get_sampling_rate(BoardIds.CYTON_BOARD))
         except BrainFlowError as e:
             logging.warning(e)
-    
+
     def clear_buffer(self):
         self.board.get_board_data()
 
