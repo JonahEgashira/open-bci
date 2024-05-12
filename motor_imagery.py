@@ -2,7 +2,6 @@ import argparse
 import time
 import sys
 import queue
-import threading
 import numpy as np
 import pandas as pd
 import logging
@@ -31,7 +30,8 @@ class MotorImageryTask(QWidget):
         self.eeg_handler = EEGHandler(
             self.board, self.directory_handler, DEFAULT_CHANNELS
         )
-        self.eeg_thread = threading.Thread(target=self.eeg_handler.collect_data)
+        self.eeg_handler.setup_and_prepare_session()
+        self.eeg_handler.start_stream()
 
         self.trials = 2
         self.trial_count = 0
@@ -60,7 +60,6 @@ class MotorImageryTask(QWidget):
     def closeEvent(self, event):
         logging.info("Closing the application")
         self.eeg_handler.stop()
-        self.eeg_thread.join()
         super().closeEvent(event)
 
     def prepareLabel(self) -> None:
@@ -83,54 +82,58 @@ class MotorImageryTask(QWidget):
         return
 
     def startTask(self):
-        self.waiting_for_start = False
-        self.eeg_thread.start()
+        self.eeg_handler.clear_buffer()
+        self.eeg_handler.set_start_time()
         self.showInstruction()
-        self.directory_handler.create_directory()
         return
 
     def keyPressEvent(self, event: QEvent) -> None:
         if self.waiting_for_start:
+            self.waiting_for_start = False
+            self.directory_handler.create_directory()
+            self.eeg_handler.create_data_file()
             self.instruction_label.setText("Starting...")
             self.instruction_label.show()
             QTimer.singleShot(self.start_wait_time, self.startTask)
-            self.waiting_for_start = False
             return
 
     def showInstruction(self):
-        instruction_number = 4
+        print(f"Trial count: {self.trial_count}")
+        current_time = time.time()
+        current_time_formatted = datetime.fromtimestamp(current_time).strftime("%H%M%S")
+        print(f"Current time: {current_time_formatted}")
+        instruction_number = 2
 
         if self.trial_count >= self.trials * instruction_number:
             self.end_task()
             return
 
-        if self.trial_count % 4 == 0:
+        if self.trial_count % instruction_number == 0:
             instruction = "Imagine"
             label = 0
-            wait_time = 5000
-        elif self.trial_count % 4 == 1:
+            wait_time = 2000
+        else:
             instruction = "Relax"
             label = 1
-            wait_time = 1000
-        elif self.trial_count % 4 == 2:
-            instruction = "Rest"
-            label = 2
-            wait_time = 5000
-        else:
-            instruction = "Ready"
-            label = 3
-            wait_time = 1000
+            wait_time = 2000
 
         self.instruction_label.setText(instruction)
         self.instruction_label.show()
         self.trial_count += 1
 
-        self.eeg_handler.set_label(label)
+        print(f"Wait time: {wait_time}")
 
-        QTimer.singleShot(wait_time, self.showInstruction)
+        self.eeg_handler.start_data_collection(label)
+
+        QTimer.singleShot(2000, self.stop_data_collection)  # 2000ms後にデータ収集停止
+
+    def stop_data_collection(self):
+        self.eeg_handler.stop_data_collection()
+        self.showInstruction()
 
     def end_task(self):
         QMessageBox.information(self, "Information", "Task Completed")
+        self.eeg_handler.stop()
         self.close()
 
 
@@ -152,87 +155,97 @@ class DirectoryHandler:
 class EEGHandler:
     def __init__(self, board, directory_handler, channels=None):
         self.board = board
-        self.stop_signal = False
+        self.sfreq = self.board.get_sampling_rate(BoardIds.CYTON_BOARD)
         self.directory_handler = directory_handler
         self.start_time = None
-        self.current_label = None
-        self.label_queue = queue.Queue()
+        self.data_storage = []
+        self.file_path = None
         if channels is None:
             self.channels = [1, 2, 3, 4, 5, 6, 7, 8]
         else:
             self.channels = channels
 
-    def set_label(self, label):
-        self.label.queue.put(label)
-
-    def collect_data(self):
+    def setup_and_prepare_session(self):
         try:
             self.board.prepare_session()
-            self.board.start_stream()
-            self.start_time = time.time()  # データ収集の開始時刻を記録
-
-            print("Start streaming")
-            print("Sfreq: ", self.board.get_sampling_rate(BoardIds.CYTON_BOARD))
-
-            data_dir = "./data"
-            if not os.path.exists(data_dir):
-                os.makedirs(data_dir)
-
-            directory_path = self.directory_handler.get_directory_path()
-            file_path = f"{directory_path}/eeg_data.csv"
-
-            eeg_data_list = []
-            timestamp_list = []
-            label_list = []
-
-            while not self.stop_signal:
-                if not self.label_queue.empty():
-                    self.current_label = self.label_queue.get()
-                    data = self.board.get_board_data()  # ラベル更新時のみデータを取得
-                    eeg_channels = self.board.get_eeg_channels(self.board.board_id)
-                    selected_channels = [eeg_channels[c - 1] for c in self.channels]
-                    eeg_data = data[selected_channels, :]
-
-                    # タイムスタンプの計算
-                    num_samples = eeg_data.shape[1]
-                    timestamps = np.arange(num_samples) / self.board.get_sampling_rate(BoardIds.CYTON_BOARD)
-                    timestamps += time.time() - self.start_time
-
-                    # ラベルの適用
-                    labels = np.full(num_samples, self.current_label)
-
-                    eeg_data_list.append(eeg_data.T)
-                    timestamp_list.append(timestamps)
-                    label_list.append(labels)
-
-            # データをまとめて処理
-            eeg_data_concat = np.concatenate(eeg_data_list, axis=0)
-            timestamp_concat = np.concatenate(timestamp_list)
-            label_concat = np.concatenate(label_list)
-
-            # データフレームの作成
-            data = pd.DataFrame(
-                eeg_data_concat,
-                columns=[f"channel_{i+1}" for i in range(eeg_data_concat.shape[1])],
-            )
-            data["timestamp"] = timestamp_concat
-            data["label"] = label_concat
-
-            # CSVファイルに保存
-            data.to_csv(file_path, index=False)
-
+            print("Session prepared")
         except BrainFlowError as e:
             logging.warning(e)
 
-        finally:
-            if self.board.is_prepared():
-                self.board.stop_stream()
-                self.board.release_session()
-                print("End of EEG data collection")
-            return
+    def start_stream(self):
+        try:
+            self.board.start_stream()
+            print("Start streaming")
+            print("Sfreq: ", self.board.get_sampling_rate(BoardIds.CYTON_BOARD))
+        except BrainFlowError as e:
+            logging.warning(e)
+    
+    def clear_buffer(self):
+        self.board.get_board_data()
+
+    def set_start_time(self):
+        self.start_time = time.time()
+        start_time_formatted = datetime.fromtimestamp(self.start_time).strftime(
+            "%H%M%S"
+        )
+        print(f"Start time: {start_time_formatted}")
+
+    def create_data_file(self):
+        data_dir = "./data"
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+
+        directory_path = self.directory_handler.get_directory_path()
+        file_path = f"{directory_path}/eeg_data.csv"
+
+        self.file_path = file_path
+
+    def get_data_file(self):
+        return self.file_path
+
+    def start_data_collection(self, label):
+        self.current_label = label
+        self.data_collection_timer = QTimer()
+        self.data_collection_timer.timeout.connect(self.collect_data)
+        self.data_collection_timer.start(50)
+
+    def collect_data(self):
+        data = self.board.get_board_data()
+
+        eeg_channels = self.board.get_eeg_channels(self.board.board_id)
+        selected_channels = [eeg_channels[c - 1] for c in self.channels]
+        eeg_data = data[selected_channels, :]
+
+        num_samples = eeg_data.shape[1]
+        timestamps = np.arange(num_samples) / self.board.get_sampling_rate(
+            BoardIds.CYTON_BOARD
+        )
+        timestamps += time.time() - self.start_time
+
+        labels = np.full(num_samples, self.current_label)
+        eeg_data_with_labels = np.column_stack((eeg_data.T, timestamps, labels))
+
+        self.data_storage.append(eeg_data_with_labels)
+
+    def stop_data_collection(self):
+        self.data_collection_timer.stop()
+
+    def save_data(self):
+        file_path = self.get_data_file()
+        data = np.concatenate(self.data_storage, axis=0)
+        df = pd.DataFrame(data)
+        df.to_csv(file_path, index=False, header=False)
+        print("Data saved to eeg_data.csv")
 
     def stop(self):
-        self.stop_signal = True
+        self.save_data()
+
+        if self.board.is_prepared():
+            self.board.stop_stream()
+            self.board.release_session()
+            print("End of EEG data collection")
+
+        return
 
 
 def set_up_board():
@@ -317,7 +330,7 @@ def main():
 
     app = QApplication(sys.argv)
 
-    MotorImageryTask(board)
+    task = MotorImageryTask(board)
 
     sys.exit(app.exec_())
 
