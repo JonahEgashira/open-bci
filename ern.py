@@ -50,6 +50,8 @@ def plot_ern(evoked_resp_cor, evoked_resp_wro, ch_name, large_scale=False):
     ch_index = evoked_resp_wro.ch_names.index(ch_name)
     time_ms = evoked_resp_wro.times * 1000
 
+    print(f"time_ms: {time_ms}")
+
     # ERNをプロット
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(
@@ -85,7 +87,7 @@ def plot_ern(evoked_resp_cor, evoked_resp_wro, ch_name, large_scale=False):
         t_step = 100
 
     # 縦軸の範囲を設定
-    # ax.set_ylim(-10, 10)
+    ax.set_ylim(-10, 10)
 
     # 横軸の範囲を設定
     ax.set_xlim(tmin, tmax)

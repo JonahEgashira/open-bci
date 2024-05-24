@@ -11,10 +11,9 @@ def create_raw_from_csv_pick(file_path, sfreq):
     picks_columns = [8]  # Corresponding to "Cz"
 
     timestamps = data.iloc[:, 0].values
-    data = data.iloc[:, picks_columns] * 100
+    data = data.iloc[:, picks_columns]
     print(f"Data shape after filtering: {data.shape}")
 
-    data = data / 1e6
     data = data.values.T
 
     ch_names = ["Cz"]
@@ -34,7 +33,6 @@ def create_raw_from_csv(file_path, sfreq):
 
     print(f"Data shape: {data.shape}")
 
-    data = data # BrainFlow returns data in microvolts, convert to volts for MNE
     data = data.values.T
 
     ch_names = [
@@ -129,13 +127,9 @@ def main():
 
     epochs = create_epochs(raw, response_path, timestamps, sfreq)
 
-    epochs.plot(block=True)
-    print(epochs)
-
     epochs.save("epoch.fif", overwrite=True)
 
     return
-
 
 if __name__ == "__main__":
     main()
