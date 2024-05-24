@@ -37,7 +37,7 @@ class Point:
         self.trial_count = 0
 
     def __repr__(self):
-        return f"Point({self.index}, {self.x}, {self.y}, {self.score})"
+        return f"Point(index: {self.index}, x:{self.x}, y:{self.y}, score:{self.score})"
 
 
 class PatternLearningTask(QWidget):
