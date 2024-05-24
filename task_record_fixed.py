@@ -51,7 +51,7 @@ class PatternLearningTask(QWidget):
 
         self.x_line_num = 4
         self.y_line_num = 4
-        self.trials = 5
+        self.trials = 50
         self.trial_count = 0
         self.point_num = self.x_line_num * self.y_line_num
         self.cell_size = 120  # Size of each cell
