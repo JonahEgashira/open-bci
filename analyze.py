@@ -8,17 +8,15 @@ def create_raw_from_csv_pick(file_path, sfreq):
 
     print(f"Data shape before filtering: {data.shape}")
 
-    # Adjust these indices to match the columns of C4, Cz, C3 in your dataset
-    # Assuming "N/A", "O2", "O1", "Pz", "C4", "Cz", "C3", "Fz" are in columns 0-7 respectively
-    picks_columns = [4, 5, 6]  # Corresponding to "C4", "Cz", "C3"
+    picks_columns = [8]  # Corresponding to "Cz"
     data = data.iloc[:, picks_columns]
 
     print(f"Data shape after filtering: {data.shape}")
 
-    data = data / 1e6  # BrainFlow returns data in microvolts, convert to volts for MNE
+    data = data / 1e6
     data = data.values.T
 
-    ch_names = ["C4", "Cz", "C3"]
+    ch_names = ["Cz"]
     ch_types = ["eeg"] * len(ch_names)
 
     info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
@@ -92,7 +90,7 @@ def main():
     raw = create_raw_from_csv_pick(file_path, sfreq)
     raw = filter_raw(raw)
 
-    picks = ["C4", "Cz", "C3"]
+    picks = ["Cz"]
 
     plot_selected_channels(raw, picks=picks)
 
