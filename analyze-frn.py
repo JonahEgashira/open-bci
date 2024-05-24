@@ -68,19 +68,19 @@ def filter_raw(raw):
 
 def create_epochs(raw, response_path, timestamps, sfreq):
     response_df = pd.read_csv(response_path, header=0)
-    
+
     start_time = timestamps[0]
     events = []
-    
+
     for _, row in response_df.iterrows():
         event_time = row["reaction_times"]
         sample_index = np.argmin(np.abs(timestamps - event_time)) # Find the closest timestamp sample
         events.append([sample_index, 0, int(row["correct_responses"])])
-    
+
     events = np.array(events)
-    
+
     event_id = dict(Correct=1, Incorrect=0)
-    
+
     tmin = -2
     tmax = 4
 
@@ -93,9 +93,9 @@ def create_epochs(raw, response_path, timestamps, sfreq):
         baseline=None,
         preload=True,
     )
-    
+
     return epochs
-    
+
 
 def plot_selected_channels(raw, picks=None):
     if picks:

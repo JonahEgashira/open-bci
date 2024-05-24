@@ -1,6 +1,7 @@
 import mne
 import numpy as np
 import matplotlib.pyplot as plt
+from autoreject import AutoReject
 
 
 def load_and_preprocess_data(filename):
@@ -16,9 +17,6 @@ def calculate_ern(epochs, ch_name):
     # 正解と誤答のEpochsを分ける
     epochs_resp_cor = epochs["Correct"]
     epochs_resp_wro = epochs["Incorrect"]
-
-    epochs_resp_cor.plot(block=True)
-    epochs_resp_wro.plot(block=True)
 
     # チャンネル名を指定
     epochs_resp_cor.pick([ch_name])
@@ -97,6 +95,35 @@ def plot_ern(evoked_resp_cor, evoked_resp_wro, ch_name, large_scale=False):
 
     plt.show()
 
+
+def autoreject_epochs(epochs):
+    # Autorejectを使ってEpochsをリジェクトする
+    # 注意: チャネル数が少ない時は使えない
+    ar = AutoReject(verbose=True)
+    epochs_clean = ar.fit_transform(epochs)
+
+    return epochs_clean
+
+def ica_preprocessing(epochs):
+    # ICAを使ってアーティファクトを除去する
+    # 注意: チャネル数が少ない時
+    ar = AutoReject(verbose=True)
+    ica = mne.preprocessing.ICA(n_components=1)
+    ica.fit(epochs)
+
+    ica.plot_components(np.arrange(0, 1))
+    exclude_input = input("Enter the components to exclude (space-separated): ")
+
+    exclude = list(map(int, exclude_input.split()))
+
+    ica.exclude = exclude
+
+    ica.plot_overlay(epochs.average(), exclude=ica.exclude)
+
+    # ICAを適用
+    ica.apply(epochs, exclude=ica.exclude)
+
+    return epochs
 
 # メイン関数
 if __name__ == "__main__":
