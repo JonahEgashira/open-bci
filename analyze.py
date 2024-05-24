@@ -10,7 +10,6 @@ def create_raw_from_csv_pick(file_path, sfreq):
 
     picks_columns = [8]  # Corresponding to "Cz"
     data = data.iloc[:, picks_columns]
-
     print(f"Data shape after filtering: {data.shape}")
 
     data = data / 1e6
